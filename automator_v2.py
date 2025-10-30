@@ -44,7 +44,7 @@ class TelegramBotAutomatorSimple:
                 if proc.info['name'] and any(name in proc.info['name'].lower() for name in ['telegram', 'telegram desktop']):
                     logging.info(f"Найден процесс Telegram: {proc.info['name']}")
                     return True
-        except (psutil.NoSuchPr ocess, psutil.AccessDenied) as e:
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
             logging.warning(f"Ошибка при поиске процессов: {e}")
         
         logging.error("Telegram не найден в запущенных процессах")
