@@ -44,7 +44,7 @@ class TelegramBotAutomatorSimple:
                 if proc.info['name'] and any(name in proc.info['name'].lower() for name in ['telegram', 'telegram desktop']):
                     logging.info(f"Найден процесс Telegram: {proc.info['name']}")
                     return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+        except (psutil.NoSuchPr ocess, psutil.AccessDenied) as e:
             logging.warning(f"Ошибка при поиске процессов: {e}")
         
         logging.error("Telegram не найден в запущенных процессах")
@@ -197,40 +197,48 @@ class TelegramBotAutomatorSimple:
         return False
 
     def switch_telegram_window(self):
-        """
-        Управляет переключением между окнами Telegram в зависимости от фазы.
-        """
         try:
-            pyautogui.keyDown('alt')
-            time.sleep(0.1)
-
             if self.is_setup_phase:
-                # Фаза настройки: "вытаскиваем" следующее окно.
-                # +2 нужно, чтобы перепрыгнуть текущее окно ТГ и терминал.
-                num_tabs = self.current_window_index + 2
-                logging.info(f"Фаза настройки: переключение на окно {self.current_window_index + 2}/{self.num_windows} ({num_tabs} нажатий Tab).")
+                # Фаза настройки: переместить терминал в конец
+                logging.info("Фаза настройки: перемещение терминала в конец...")
+                pyautogui.keyDown('alt')
+                time.sleep(0.1)
+
+                # Нажимаем Tab на количество всех окон, чтобы "протолкнуть" терминал в конец
+                for _ in range(self.num_windows):
+                    pyautogui.press('tab')
+                    time.sleep(0.05)
+
+                pyautogui.keyUp('alt')
+                time.sleep(0.1)
+
+                logging.info("Фаза настройки завершена. Терминал в конце.")
+                self.is_setup_phase = False
+                self.current_window_index = 0  # Начинаем с первого ТГ
+
+            else:
+                # Рабочая фаза: циклическое переключение между ТГ окнами
+                # Каждый раз нажимаем на 1 больше: ТГ1→ТГ2 (1 раз), ТГ2→ТГ3 (2 раза), и т.д.
+                pyautogui.keyDown('alt')
+                time.sleep(0.1)
+
+                num_tabs = self.current_window_index + 1
+                logging.info(f"Переключение на ТГ окно (нажатие Tab {num_tabs} раз)...")
+
                 for _ in range(num_tabs):
                     pyautogui.press('tab')
-                    time.sleep(0.1)
-                
-                self.current_window_index += 1
-                # Проверяем, не является ли это последним окном в фазе настройки
-                if self.current_window_index >= self.num_windows - 1:
-                    logging.info("Фаза настройки завершена. Все окна выстроены.")
-                    self.is_setup_phase = False
-                    self.current_window_index = 0 # Сбрасываем для рабочего цикла
-            else:
-                # Рабочая фаза: просто переключаемся на следующее окно
-                logging.info("Рабочая фаза: переключение на следующее окно.")
-                pyautogui.press('tab')
+                    time.sleep(0.05)
+
+                pyautogui.keyUp('alt')
+                time.sleep(0.1)
+
+                # Переходим к следующему ТГ окну
                 self.current_window_index = (self.current_window_index + 1) % self.num_windows
-            
-            pyautogui.keyUp('alt')
-            time.sleep(0.1)
-            logging.info("Переключение выполнено.")
+                logging.info(f"Текущее окно: {self.current_window_index + 1}/{self.num_windows}")
 
         except Exception as e:
             logging.error(f"Ошибка при переключении окон: {e}")
+
 
     def main_automation_loop(self) -> None:
         """Основной цикл автоматизации"""
