@@ -34,6 +34,7 @@ class TelegramBotAutomatorSimple:
         self.num_windows = num_windows
         self.is_setup_phase = True  # Флаг для фазы настройки
         self.current_window_index = 0  # Индекс текущего окна (от 0 до num_windows-1)
+        self.telegram_windows_count = 0
 
     def find_telegram_window(self) -> bool:
         """Поиск окна Telegram среди запущенных процессов"""
@@ -55,7 +56,7 @@ class TelegramBotAutomatorSimple:
         try:
             logging.info("Активация окна Telegram...")
             pyautogui.hotkey('alt', 'tab')
-            time.sleep(1)
+            time.sleep(0.1)
             logging.info("Окно Telegram должно быть активно.")
             return True
         except Exception as e:
@@ -155,7 +156,7 @@ class TelegramBotAutomatorSimple:
                 return True
             
             logging.info("Изображение не найдено, пробую снова через 1 секунду...")
-            time.sleep(1)
+            time.sleep(0.1)
 
         logging.warning(f"Изображение '{image_path}' не найдено за {timeout} секунд.")
         return False
@@ -183,7 +184,7 @@ class TelegramBotAutomatorSimple:
                             logging.info(f"Найдена кнопка пропуска рекламы '{data['text'][i]}' в ({click_x}, {click_y}). Кликаю.")
                             pyautogui.click(click_x, click_y)
                             found_skip_button = True
-                            time.sleep(2)
+                            time.sleep(0.5)
                             return True
 
             if not found_skip_button:
@@ -198,39 +199,101 @@ class TelegramBotAutomatorSimple:
 
     def switch_telegram_window(self):
         """
-        Управляет переключением между окнами Telegram в зависимости от фазы.
+        Управляет переключением между окнами Telegram.
+        Фаза настройки: определяет кол-во ТГ окон и перемещает терминал в конец.
+        Рабочая фаза: циклическое переключение только между ТГ окнами.
         """
         try:
-            pyautogui.keyDown('alt')
-            time.sleep(0.1)
-
+            # ФАЗА НАСТРОЙКИ: первый вызов
             if self.is_setup_phase:
-                # Фаза настройки: "вытаскиваем" следующее окно.
-                # +2 нужно, чтобы перепрыгнуть текущее окно ТГ и терминал.
-                num_tabs = self.current_window_index + 2
-                logging.info(f"Фаза настройки: переключение на окно {self.current_window_index + 2}/{self.num_windows} ({num_tabs} нажатий Tab).")
-                for _ in range(num_tabs):
+                self.telegram_windows_count = self._count_telegram_windows()
+
+                if self.telegram_windows_count <= 0:
+                    logging.warning("❌ Telegram окна не найдены")
+                    return False
+
+                logging.info(f"📊 Обнаружено Telegram окон: {self.telegram_windows_count}")
+
+                # Перемещаем терминал в конец списка Alt+Tab
+                # Нажимаем Alt+Tab ровно столько раз, сколько окон Telegram
+                pyautogui.keyDown('alt')
+                time.sleep(0.15)
+
+                for i in range(self.telegram_windows_count):
                     pyautogui.press('tab')
                     time.sleep(0.1)
-                
-                self.current_window_index += 1
-                # Проверяем, не является ли это последним окном в фазе настройки
-                if self.current_window_index >= self.num_windows - 1:
-                    logging.info("Фаза настройки завершена. Все окна выстроены.")
-                    self.is_setup_phase = False
-                    self.current_window_index = 0 # Сбрасываем для рабочего цикла
+
+                pyautogui.keyUp('alt')
+                time.sleep(0.2)
+
+                self.is_setup_phase = False
+                logging.info("✅ Фаза настройки завершена. Терминал в конце списка.")
+                return True
+
+            # РАБОЧАЯ ФАЗА: циклическое переключение между ТГ окнами
             else:
-                # Рабочая фаза: просто переключаемся на следующее окно
-                logging.info("Рабочая фаза: переключение на следующее окно.")
-                pyautogui.press('tab')
-                self.current_window_index = (self.current_window_index + 1) % self.num_windows
-            
-            pyautogui.keyUp('alt')
-            time.sleep(0.1)
-            logging.info("Переключение выполнено.")
+                # Нажимаем Alt+Tab количество раз = количеству Telegram окон
+                pyautogui.keyDown('alt')
+                time.sleep(0.15)
+
+                for _ in range(self.telegram_windows_count):
+                    pyautogui.press('tab')
+                    time.sleep(0.08)
+
+                pyautogui.keyUp('alt')
+                time.sleep(0.4)
+
+                logging.debug(f"➡️ Переключение на следующее окно (из {self.telegram_windows_count})")
+                return True
 
         except Exception as e:
-            logging.error(f"Ошибка при переключении окон: {e}")
+            logging.error(f"❌ Ошибка при переключении окна: {e}")
+            return False
+
+    def _count_telegram_windows(self):
+        """
+        Подсчитывает количество открытых окон Telegram.
+        Поддержка Windows, Linux, macOS.
+        """
+        try:
+            if sys.platform == 'win32':
+                import win32gui
+
+                telegram_count = 0
+
+                def enum_window_callback(hwnd, extra):
+                    nonlocal telegram_count
+                    try:
+                        if win32gui.IsWindowVisible(hwnd):
+                            window_title = win32gui.GetWindowText(hwnd)
+                            # Ищем окна с "Telegram" в названии
+                            if 'Telegram' in window_title:
+                                telegram_count += 1
+                                logging.debug(f"🔍 Найдено ТГ окно: {window_title}")
+                    except:
+                        pass
+                    return True
+
+                win32gui.EnumWindows(enum_window_callback, None)
+                return telegram_count
+
+            elif sys.platform == 'linux':
+                import subprocess
+                result = subprocess.run(
+                    ['wmctrl', '-l'],
+                    capture_output=True,
+                    text=True
+                )
+                return result.stdout.count('Telegram')
+
+            else:
+                logging.warning("⚠️ Автоподсчет окон не поддерживается на этой ОС")
+                return 1
+
+        except Exception as e:
+            logging.error(f"❌ Ошибка при подсчете окон: {e}")
+            return 1
+
 
     def main_automation_loop(self) -> None:
         """Основной цикл автоматизации"""
@@ -271,7 +334,7 @@ class TelegramBotAutomatorSimple:
             # 3. Переключаемся на следующее окно, только если их больше одного
             if self.num_windows > 1:
                 self.switch_telegram_window()
-                time.sleep(0.5) # Пауза после переключения
+                time.sleep(0.3) # Пауза после переключения
 
     def stop_automation(self) -> None:
         """Остановка автоматизации"""
