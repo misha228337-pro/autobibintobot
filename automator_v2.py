@@ -10,7 +10,7 @@ from typing import Optional, Tuple, List
 import os
 import config
 from PIL import Image, ImageGrab
-
+import sys
 # Настройка пути к Tesseract если указан в конфиге
 if config.TESSERACT_PATH:
     pytesseract.pytesseract.tesseract_cmd = config.TESSERACT_PATH
@@ -163,11 +163,18 @@ class TelegramBotAutomatorSimple:
 
 
     def handle_ad(self) -> bool:
-        """Обнаружение и обработка рекламы"""
+        """Обнаружение и обработка рекламы с улучшенной фильтрацией"""
         logging.info("Проверка на наличие рекламы...")
         
-        # Список возможных текстов на кнопках для пропуска рекламы
-        skip_buttons = ["Пропустить", "Ладно", "Далее"]
+        # Список текстов для кнопок пропуска рекламы (исключаем "Ладно")
+        skip_buttons = ["Пропустить", "Далее", "Пропустить рекламу", "Skip"]
+        
+        # Получаем размеры экрана для определения положения кнопок
+        screen_width, screen_height = pyautogui.size()
+        
+        # Определяем область, где обычно находятся кнопки рекламы (нижняя часть экрана)
+        ad_button_area_y = screen_height * 0.7  # Нижние 30% экрана
+        
         screenshot = pyautogui.screenshot()
         
         try:
@@ -176,16 +183,27 @@ class TelegramBotAutomatorSimple:
             
             found_skip_button = False
             for i in range(len(data['text'])):
-                for button_text in skip_buttons:
-                    if button_text.lower() in data['text'][i].lower():
-                        if int(data['conf'][i]) > 60:
+                text = data['text'][i].strip()
+                confidence = int(data['conf'][i])
+                y_position = data['top'][i]
+                
+                # Проверяем только текст с высокой уверенностью и в правильной области экрана
+                if confidence > 70 and y_position > ad_button_area_y:
+                    for button_text in skip_buttons:
+                        # Ищем точное совпадение или содержимое кнопки
+                        if (text.lower() == button_text.lower() or
+                            (button_text.lower() in text.lower() and len(text) <= len(button_text) + 5)):
+                            
                             x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
                             click_x, click_y = x + w // 2, y + h // 2
-                            logging.info(f"Найдена кнопка пропуска рекламы '{data['text'][i]}' в ({click_x}, {click_y}). Кликаю.")
-                            pyautogui.click(click_x, click_y)
-                            found_skip_button = True
-                            time.sleep(0.5)
-                            return True
+                            
+                            # Дополнительная проверка: кнопка должна иметь разумные размеры
+                            if w > 30 and h > 15 and w < 300 and h < 100:
+                                logging.info(f"Найдена кнопка пропуска рекламы '{text}' в ({click_x}, {click_y}). Кликаю.")
+                                pyautogui.click(click_x, click_y)
+                                found_skip_button = True
+                                time.sleep(0.5)
+                                return True
 
             if not found_skip_button:
                 logging.info("Реклама не обнаружена.")
@@ -295,46 +313,75 @@ class TelegramBotAutomatorSimple:
             return 1
 
 
+    def alt_tab_sequence(self, tab_count: int) -> None:
+        """
+        Выполняет последовательность Alt+Tab указанное количество раз
+        """
+        if tab_count <= 0:
+            return
+            
+        pyautogui.keyDown('alt')
+        time.sleep(0.15)
+        
+        for _ in range(tab_count):
+            pyautogui.press('tab')
+            time.sleep(0.08)
+        
+        pyautogui.keyUp('alt')
+        time.sleep(0.3)
+        
+        logging.debug(f"Выполнено {tab_count} переключений Alt+Tab")
+
+    def process_window_actions(self) -> None:
+        """
+        Выполняет действия в текущем окне: проверка рекламы и поиск сердца
+        """
+        # 1. Проверяем и закрываем рекламу
+        if self.handle_ad():
+            logging.info("Реклама обработана.")
+            
+        # 2. Ищем и кликаем на сердце
+        elif self.find_and_click_image_simple('heart_button.png', timeout=10):
+            logging.info("Успешно кликнули на сердце.")
+            time.sleep(random.uniform(config.MIN_RATING_INTERVAL, config.MAX_RATING_INTERVAL))
+        
+        else:
+            logging.warning("Кнопка с сердцем не найдена.")
+            time.sleep(3)
+
     def main_automation_loop(self) -> None:
-        """Основной цикл автоматизации"""
-        logging.info("Запуск основной программы автоматизации (простая версия)...")
+        """Основной цикл автоматизации с новым алгоритмом переключения окон"""
+        logging.info("Запуск основной программы автоматизации (новая версия)...")
         
         if not self.find_telegram_window():
             logging.error("Telegram не найден. Пожалуйста, запустите Telegram.")
             return
-        
-        # Первое, самое первое переключение из терминала в ТГ1
-        if not self.activate_telegram_window():
-            logging.error("Не удалось активировать окно Telegram.")
-            return
-            
         logging.info(f"Нажмите '{config.STOP_KEY}' для остановки.")
-        
+        self.alt_tab_sequence(1)
+        self.process_window_actions()
+        for outer_tabs in range(2, self.num_windows+1):
+                if not self.running:
+                    break
+                logging.info(f"Внешний цикл: {outer_tabs} Alt+Tab")
+                self.alt_tab_sequence(outer_tabs)
+                self.process_window_actions()
+
         while self.running:
             if keyboard.is_pressed(config.STOP_KEY):
                 logging.info("Программа остановлена пользователем.")
                 self.running = False
                 break
 
-            logging.info(f"Работа в окне #{self.current_window_index + 1}")
-
-            # 1. Проверяем и закрываем рекламу
-            if self.handle_ad():
-                logging.info("Реклама обработана.")
+            for inner_tabs in range(1, self.num_windows):
+                    if not self.running:
+                        break
+                        
+                    logging.info(f"Внутренний цикл: {inner_tabs} Alt+Tab")
+                    self.alt_tab_sequence(inner_tabs)
+                    self.process_window_actions()
                 
-            # 2. Ищем и кликаем на сердце
-            elif self.find_and_click_image_simple('heart_button.png', timeout=10):
-                logging.info("Успешно кликнули на сердце.")
-                time.sleep(random.uniform(config.MIN_RATING_INTERVAL, config.MAX_RATING_INTERVAL))
             
-            else:
-                logging.warning("Кнопка с сердцем не найдена.")
-                time.sleep(3)
-            
-            # 3. Переключаемся на следующее окно, только если их больше одного
-            if self.num_windows > 1:
-                self.switch_telegram_window()
-                time.sleep(0.3) # Пауза после переключения
+            logging.info("Завершение полного цикла, начинаем заново...")
 
     def stop_automation(self) -> None:
         """Остановка автоматизации"""
