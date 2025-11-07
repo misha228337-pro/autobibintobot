@@ -195,8 +195,8 @@ class TelegramBotAutomatorSimple:
         screen_width, screen_height = pyautogui.size()
         
         # Определяем область, где обычно находятся кнопки рекламы (нижняя часть экрана)
-        ad_button_area_y = screen_height * 0.7  # Нижние 30% экрана
-        
+        ad_button_area_y = screen_height * 0.5  # Нижние 30% экрана
+        time.sleep(0.5)
         screenshot = pyautogui.screenshot()
         
         try:
@@ -220,7 +220,7 @@ class TelegramBotAutomatorSimple:
                             click_x, click_y = x + w // 2, y + h // 2
                             
                             # Дополнительная проверка: кнопка должна иметь разумные размеры
-                            if w > 30 and h > 15 and w < 300 and h < 100:
+                            if w > 10 and h > 5 and w < 1000 and h < 500:
                                 logging.info(f"Найдена кнопка пропуска рекламы '{text}' в ({click_x}, {click_y}). Кликаю.")
                                 pyautogui.click(click_x, click_y)
                                 found_skip_button = True
