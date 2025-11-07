@@ -137,28 +137,50 @@ class TelegramBotAutomatorSimple:
             
         return None
 
-    def find_and_click_image_simple(self, image_path: str, timeout: int = 10) -> bool:
-        """Поиск изображения с помощью PIL и клик по нему"""
+    def scroll_down(self) -> None:
+        """Выполняет прокрутку вниз с помощью колеса мыши"""
+        screen_width, screen_height = pyautogui.size()
+        # Центр экрана для прокрутки
+        center_x = screen_width // 2
+        center_y = screen_height // 2
+        
+        # Перемещаем курсор в центр экрана
+        pyautogui.moveTo(center_x, center_y, duration=0.2)
+        time.sleep(0.1)
+        
+        # Выполняем прокрутку вниз
+        pyautogui.scroll(-800)  # Отрицательное значение для прокрутки вниз
+        time.sleep(0.05)  # Пауза после прокрутки
+        
+        logging.info("Выполнена прокрутка вниз")
+
+    def find_and_click_image_simple(self, image_path: str, timeout: int = 10, max_scrolls: int = 3) -> bool:
+        """Поиск изображения с помощью PIL и клик по нему с возможностью прокрутки"""
         logging.info(f"Поиск изображения '{image_path}' в нижней части экрана...")
         
         screen_width, screen_height = pyautogui.size()
-        # Определяем область поиска: нижняя половина экрана (формат: left, top, width, height)
-        top = screen_height // 2
-        height = screen_height - top - int(screen_height * 0.05) # Нижняя половина минус 5% от нижнего края
-        search_region = (0, top, screen_width, height)
         
+        scroll_attempts = 0
         start_time = time.time()
+        
         while time.time() - start_time < timeout:
+            # Определяем область поиска: нижняя половина экрана (формат: left, top, width, height)
+            top = screen_height // 2
+            height = screen_height - top - int(screen_height * 0.05) # Нижняя половина минус 5% от нижнего края
+            search_region = (0, top, screen_width, height)
+            
             location = self.find_image_pil(image_path, region=search_region)
             if location:
                 logging.info(f"Изображение '{image_path}' найдено. Кликаю в {location}.")
                 pyautogui.click(location[0], location[1])
                 return True
             
-            logging.info("Изображение не найдено, пробую снова через 1 секунду...")
-            time.sleep(0.1)
+            # Если изображение не найдено и еще не использовали все попытки прокрутки
+            else:
+                logging.info("Изображение не найдено, пробую снова через 1 секунду...")
+                time.sleep(0.1)
 
-        logging.warning(f"Изображение '{image_path}' не найдено за {timeout} секунд.")
+        logging.warning(f"Изображение '{image_path}' не найдено за {timeout} секунд после {max_scrolls} попыток прокрутки.")
         return False
 
 
@@ -202,7 +224,7 @@ class TelegramBotAutomatorSimple:
                                 logging.info(f"Найдена кнопка пропуска рекламы '{text}' в ({click_x}, {click_y}). Кликаю.")
                                 pyautogui.click(click_x, click_y)
                                 found_skip_button = True
-                                time.sleep(0.5)
+                                time.sleep(0.3)
                                 return True
 
             if not found_skip_button:
@@ -259,7 +281,7 @@ class TelegramBotAutomatorSimple:
                     time.sleep(0.08)
 
                 pyautogui.keyUp('alt')
-                time.sleep(0.4)
+                time.sleep(0.3)
 
                 logging.debug(f"➡️ Переключение на следующее окно (из {self.telegram_windows_count})")
                 return True
@@ -328,7 +350,7 @@ class TelegramBotAutomatorSimple:
             time.sleep(0.08)
         
         pyautogui.keyUp('alt')
-        time.sleep(0.3)
+        time.sleep(0.2)
         
         logging.debug(f"Выполнено {tab_count} переключений Alt+Tab")
 
@@ -347,7 +369,7 @@ class TelegramBotAutomatorSimple:
         
         else:
             logging.warning("Кнопка с сердцем не найдена.")
-            time.sleep(3)
+            time.sleep(2)
 
     def main_automation_loop(self) -> None:
         """Основной цикл автоматизации с новым алгоритмом переключения окон"""
@@ -364,6 +386,9 @@ class TelegramBotAutomatorSimple:
                     break
                 logging.info(f"Внешний цикл: {outer_tabs} Alt+Tab")
                 self.alt_tab_sequence(outer_tabs)
+                time.sleep(0.3)
+                self.scroll_down()
+                time.sleep(0.1)
                 self.process_window_actions()
 
         while self.running:
@@ -378,6 +403,9 @@ class TelegramBotAutomatorSimple:
                         
                     logging.info(f"Внутренний цикл: {inner_tabs} Alt+Tab")
                     self.alt_tab_sequence(inner_tabs)
+                    time.sleep(0.3)
+                    self.scroll_down()
+                    time.sleep(0.1)
                     self.process_window_actions()
                 
             
