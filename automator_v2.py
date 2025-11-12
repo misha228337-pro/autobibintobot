@@ -189,7 +189,7 @@ class TelegramBotAutomatorSimple:
         logging.info("Проверка на наличие рекламы...")
         
         # Список текстов для кнопок пропуска рекламы (исключаем "Ладно")
-        skip_buttons = ["Пропустить", "Далее", "Пропустить рекламу", "Skip"]
+        skip_buttons = ["Пропустить", "Далее", "Пропустить рекламу", "Skip", "Ладно"]
         
         # Получаем размеры экрана для определения положения кнопок
         screen_width, screen_height = pyautogui.size()
@@ -396,7 +396,11 @@ class TelegramBotAutomatorSimple:
                 logging.info("Программа остановлена пользователем.")
                 self.running = False
                 break
-
+            if self.num_windows == 1:
+                if not self.running:
+                        break
+                self.process_window_actions()
+                time.sleep(0.1)
             for inner_tabs in range(1, self.num_windows):
                     if not self.running:
                         break
