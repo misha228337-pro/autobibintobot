@@ -2,18 +2,13 @@ import pyautogui
 import time
 import random
 import logging
-import pytesseract
 import keyboard
 import psutil
-import re
 from typing import Optional, Tuple, List
 import os
 import config
 from PIL import Image, ImageGrab
 import sys
-# Настройка пути к Tesseract если указан в конфиге
-if config.TESSERACT_PATH:
-    pytesseract.pytesseract.tesseract_cmd = config.TESSERACT_PATH
 
 # Настройка логирования
 logging.basicConfig(
@@ -154,7 +149,7 @@ class TelegramBotAutomatorSimple:
         
         logging.info("Выполнена прокрутка вниз")
 
-    def find_and_click_image_simple(self, image_path: str, timeout: int = 10, max_scrolls: int = 3) -> bool:
+    def find_and_click_image_simple(self, image_path: str, timeout: int = 3, max_scrolls: int = 3) -> bool:
         """Поиск изображения с помощью PIL и клик по нему с возможностью прокрутки"""
         logging.info(f"Поиск изображения '{image_path}' в нижней части экрана...")
         
@@ -164,7 +159,6 @@ class TelegramBotAutomatorSimple:
         start_time = time.time()
         
         while time.time() - start_time < timeout:
-            # Определяем область поиска: нижняя половина экрана (формат: left, top, width, height)
             top = screen_height // 2
             height = screen_height - top - int(screen_height * 0.05) # Нижняя половина минус 5% от нижнего края
             search_region = (0, top, screen_width, height)
@@ -180,62 +174,27 @@ class TelegramBotAutomatorSimple:
                 logging.info("Изображение не найдено, пробую снова через 1 секунду...")
                 time.sleep(0.1)
 
-        logging.warning(f"Изображение '{image_path}' не найдено за {timeout} секунд после {max_scrolls} попыток прокрутки.")
+        logging.warning(f"Изображение '{image_path}' не найдено за {timeout} секунд.")
         return False
 
 
-    def handle_ad(self) -> bool:
-        """Обнаружение и обработка рекламы с улучшенной фильтрацией"""
-        logging.info("Проверка на наличие рекламы...")
-        
-        # Список текстов для кнопок пропуска рекламы (исключаем "Ладно")
-        skip_buttons = ["Пропустить", "Далее", "Пропустить рекламу", "Skip", "Ладно"]
-        
-        # Получаем размеры экрана для определения положения кнопок
-        screen_width, screen_height = pyautogui.size()
-        
-        # Определяем область, где обычно находятся кнопки рекламы (нижняя часть экрана)
-        ad_button_area_y = screen_height * 0.5  # Нижние 30% экрана
-        time.sleep(0.5)
-        screenshot = pyautogui.screenshot()
-        
+    def type_search_command(self) -> None:
+        """Вводит команду /search в чат"""
         try:
-            # Используем OCR для поиска текста на скриншоте
-            data = pytesseract.image_to_data(screenshot, lang=config.OCR_LANGUAGES, output_type=pytesseract.Output.DICT)
+            logging.info("Ввожу команду /search в чат...")
             
-            found_skip_button = False
-            for i in range(len(data['text'])):
-                text = data['text'][i].strip()
-                confidence = int(data['conf'][i])
-                y_position = data['top'][i]
-                
-                # Проверяем только текст с высокой уверенностью и в правильной области экрана
-                if confidence > 70 and y_position > ad_button_area_y:
-                    for button_text in skip_buttons:
-                        # Ищем точное совпадение или содержимое кнопки
-                        if (text.lower() == button_text.lower() or
-                            (button_text.lower() in text.lower() and len(text) <= len(button_text) + 5)):
-                            
-                            x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                            click_x, click_y = x + w // 2, y + h // 2
-                            
-                            # Дополнительная проверка: кнопка должна иметь разумные размеры
-                            if w > 10 and h > 5 and w < 1000 and h < 500:
-                                logging.info(f"Найдена кнопка пропуска рекламы '{text}' в ({click_x}, {click_y}). Кликаю.")
-                                pyautogui.click(click_x, click_y)
-                                found_skip_button = True
-                                time.sleep(0.3)
-                                return True
-
-            if not found_skip_button:
-                logging.info("Реклама не обнаружена.")
-                return False
-
+            # Просто вводим команду /search без кликов
+            pyautogui.typewrite('/search', interval=0.2)
+            time.sleep(0.3)
+            
+            # Нажимаем Enter
+            pyautogui.press('enter')
+            time.sleep(0.3)
+            
+            logging.info("Команда /search отправлена")
+            
         except Exception as e:
-            logging.error(f"Ошибка при обработке рекламы: {e}")
-            return False
-        
-        return False
+            logging.error(f"Ошибка при вводе команды /search: {e}")
 
     def switch_telegram_window(self):
         """
@@ -356,20 +315,29 @@ class TelegramBotAutomatorSimple:
 
     def process_window_actions(self) -> None:
         """
-        Выполняет действия в текущем окне: проверка рекламы и поиск сердца
+        Выполняет действия в текущем окне: поиск сердца и ввод /search если не найдено
         """
-        # 1. Проверяем и закрываем рекламу
-        if self.handle_ad():
-            logging.info("Реклама обработана.")
-            
-        # 2. Ищем и кликаем на сердце
-        elif self.find_and_click_image_simple('heart_button.png', timeout=10):
+        # Ищем и кликаем на сердце
+        if self.find_and_click_image_simple('heart_button.png', timeout=3):
             logging.info("Успешно кликнули на сердце.")
             time.sleep(random.uniform(config.MIN_RATING_INTERVAL, config.MAX_RATING_INTERVAL))
+            # Перемещаем курсор в центр экрана
+            screen_width, screen_height = pyautogui.size()
+            pyautogui.moveTo(screen_width // 2, screen_height // 2, duration=0.2)
+            # Скроллим вниз на 500 пикселей
+            pyautogui.scroll(-500)
+            time.sleep(0.1)
         
         else:
-            logging.warning("Кнопка с сердцем не найдена.")
-            time.sleep(2)
+            logging.warning("Кнопка с сердцем не найдена. Ввожу команду /search.")
+            self.type_search_command()
+            time.sleep(1)
+            # Перемещаем курсор в центр экрана
+            screen_width, screen_height = pyautogui.size()
+            pyautogui.moveTo(screen_width // 2, screen_height // 2, duration=0.2)
+            # Скроллим вниз на 500 пикселей
+            pyautogui.scroll(-500)
+            time.sleep(0.1)
 
     def main_automation_loop(self) -> None:
         """Основной цикл автоматизации с новым алгоритмом переключения окон"""
@@ -386,7 +354,7 @@ class TelegramBotAutomatorSimple:
                     break
                 logging.info(f"Внешний цикл: {outer_tabs} Alt+Tab")
                 self.alt_tab_sequence(outer_tabs)
-                time.sleep(0.3)
+                time.sleep(0.2)
                 self.scroll_down()
                 time.sleep(0.1)
                 self.process_window_actions()
@@ -407,7 +375,7 @@ class TelegramBotAutomatorSimple:
                         
                     logging.info(f"Внутренний цикл: {inner_tabs} Alt+Tab")
                     self.alt_tab_sequence(inner_tabs)
-                    time.sleep(0.3)
+                    time.sleep(0.1)
                     self.scroll_down()
                     time.sleep(0.1)
                     self.process_window_actions()

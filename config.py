@@ -3,7 +3,7 @@
 """
 
 # Настройки временных интервалов (в секундах)
-MIN_RATING_INTERVAL = 0.6
+MIN_RATING_INTERVAL = 0.3
 MAX_RATING_INTERVAL = 1.1
 
 # Настройки оценки
@@ -21,16 +21,7 @@ SEARCH_TIMEOUT = 10
 MIN_CHAR_DELAY = 0.05
 MAX_CHAR_DELAY = 0.15
 
-# Настройки для Tesseract OCR
-# Укажите путь к Tesseract, если он не в системной переменной PATH
-TESSERACT_PATH = None  # Пример: r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Языки для распознавания текста
-OCR_LANGUAGES = 'rus+eng'
-
-# Ключевые слова для поиска элементов интерфейса
-RATE_BUTTON_TEXT = "Оценивать"
-PROFILE_INDICATORS = ["лет", "город", "ищу", "анкета", "возраст"]
 
 # Настройки логирования
 LOG_LEVEL = "INFO"
