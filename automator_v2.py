@@ -183,13 +183,14 @@ class TelegramBotAutomatorSimple:
         try:
             logging.info("Ввожу команду /search в чат...")
             
-            # Просто вводим команду /search без кликов
-            pyautogui.typewrite('/search', interval=0.2)
-            time.sleep(0.3)
+            # Вводим команду /search с надежной задержкой
+            pyautogui.typewrite('/search', interval=0.1)
+            # Даем время на завершение ввода всей команды
+            time.sleep(1.0)
             
             # Нажимаем Enter
             pyautogui.press('enter')
-            time.sleep(0.3)
+            time.sleep(0.1)
             
             logging.info("Команда /search отправлена")
             
